@@ -1,7 +1,6 @@
-import psycopg2
-from psycopg2 import Error
-from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from contextlib import contextmanager
+import psycopg2
+from psycopg2 import Error, extensions
 from dotenv import load_dotenv
 import os
 
@@ -13,18 +12,20 @@ def get_cursor():
     cursor = None
     try:
         connection = psycopg2.connect(
-            dbname=os.getenv("DB_NAME", "gpstrack"),
-            user=os.getenv("DB_USER", "postgres"),
-            password=os.getenv("DB_PASSWORD", "password"),
-            host=os.getenv("DB_HOST", "db"),
-            port=os.getenv("DB_PORT", "5432")
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT")
         )
-        connection.set_isolation_level(ISOLATION_LEVEL_AUTOCOMMIT)
+        connection.set_isolation_level(extensions.ISOLATION_LEVEL_AUTOCOMMIT)
         cursor = connection.cursor()
         yield cursor
     except (Exception, Error) as error:
         print("Ошибка при работе с PostgreSQL:", error)
         print("DB_HOST =", os.getenv("DB_HOST"))
+        # Здесь можно сделать yield None, чтобы избежать ошибки "generator didn't yield"
+        yield None
     finally:
         if cursor:
             cursor.close()
