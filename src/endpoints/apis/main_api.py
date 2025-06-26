@@ -116,6 +116,11 @@ async def register_post(
 async def gps_post(
         track_request: TrackRequest = Body(None, description="")
 ) -> TrackResponse:
+    if not mainService.user_exists(track_request.user_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=Error(message=f"Пользователь с id: {track_request.user_id} не найден").model_dump()
+        )
     try:
         lat_str, lon_str = track_request.latitude, track_request.longitude
         lat = float(lat_str.strip())
@@ -125,29 +130,38 @@ async def gps_post(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=Error(message=f"Координаты вне диапазона: {lat}, {lon}").model_dump()
             )
-    except Exception as e:
+    except TypeError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=Error(
-                message=f"Некорректный формат координат: {track_request.latitude, track_request.longitude}. Причина: {e}").model_dump())
+                message=f"Некорректный формат координат: {track_request.latitude, track_request.longitude}").model_dump())
+    try:
+        timestamp_datetime = datetime.strptime(track_request.timestamp, "%Y-%m-%d %H:%M:%S.%f")
+    except TypeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=Error(
+                message=f"Некорректный формат времени: {track_request.timestamp}. Необходимо формат YYYY-MM-DD HH:MM:SS.ffff").model_dump())
 
     try:
         gps_track = mainService.add_gps(
             track_request.user_id,
             track_request.latitude,
             track_request.longitude,
-            datetime.strptime(track_request.timestamp, "%Y-%m-%d %H:%M:%S.%f"))
+            timestamp_datetime)
+
         return TrackResponse(
             id=gps_track.id,
             user_id=gps_track.user_id,
             latitude=gps_track.latitude,
             longitude=gps_track.longitude,
             timestamp=gps_track.timestamp)
-    except UserFindException:
+    except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=Error(message=f"Пользователь с id: {track_request.user_id} не найден").model_dump()
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=Error(message=f"{e}").model_dump()
         )
+
 
 
 @router.get(
@@ -185,7 +199,7 @@ async def track_get(
         return TrackFilteredResponse(tracks=filtered_tracks)
     except Exception as e:
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=Error(message=f"{e}").model_dump()
             )
 

@@ -15,12 +15,16 @@ services:
       - internal
 
   db:
-    image: postgres:16.3
-    container_name: postgres
+    build:
+      dockerfile: Dockerfile.postgresql
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
       POSTGRES_DB: gpstrack
+    command:
+      - "postgres"
+      - "-c"
+      - "shared_preload_libraries=pg_cron"
     volumes:
       - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:

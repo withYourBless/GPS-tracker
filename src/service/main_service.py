@@ -4,6 +4,7 @@ from typing import List
 from src.Exceptions import UserLoginException, UserRegisterException, UserFindException
 from src.endpoints.apis.main_api import UserPasswordException
 from src.endpoints.security_api import verify_password, create_access_token, get_password_hash
+from src.repository.db_models import User
 from src.repository.repository import get_user_by_email, create_user, add_gps, get_all_tracks_by_date, \
     get_tracks_by_date_userid, get_user_by_id
 from src.service.models.loginIn import LoginIn
@@ -27,7 +28,8 @@ class MainService:
             timestamp=track.timestamp,
         )
 
-    def get_tracks_by_date(self, start_date: datetime, end_date: datetime, token_bearerAuth: TokenModel) -> List[TrackOut]:
+    def get_tracks_by_date(self, start_date: datetime, end_date: datetime, token_bearerAuth: TokenModel) -> List[
+        TrackOut]:
         if token_bearerAuth.role == Role.ADMIN.value:
             tracks = get_all_tracks_by_date(start_date, end_date)
         else:
@@ -42,7 +44,6 @@ class MainService:
                     longitude=track.longitude,
                     timestamp=track.timestamp))
         return filtered_tracks
-
 
     def login(self, login_in: LoginIn) -> str:
         email = login_in.email
@@ -80,5 +81,7 @@ class MainService:
             name=user.name,
             email=user.email,
             role=user.role,
-            register_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),)
+            register_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
 
+    def user_exists(self, user_id: str) -> bool:
+        return get_user_by_id(user_id) is not None
