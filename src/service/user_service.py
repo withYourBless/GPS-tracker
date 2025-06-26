@@ -1,6 +1,6 @@
 from typing import List
 
-from src.Exceptions import UserRegisterException
+from src.Exceptions import UserRegisterException, UserFindException
 from src.endpoints.security_api import get_password_hash
 from src.repository.repository import get_user_by_email, update_user_info, user_change_role, delete_user, get_all_users, \
     get_user_by_id, get_tracks_by_id
@@ -38,6 +38,8 @@ class UserService:
                        register_date=user.register_date)
 
     async def delete_user(self, user_id: str) -> str:
+        if get_user_by_id(user_id):
+            raise UserFindException
         return delete_user(user_id)
 
     def get_users(self) -> List[UserOut]:

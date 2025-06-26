@@ -1,5 +1,4 @@
 from datetime import datetime
-from fastapi import Path
 from typing import Optional
 
 from fastapi import (
@@ -9,9 +8,10 @@ from fastapi import (
     Query,
     Security,
     status,
+    Path,
 )
 
-from src.Exceptions import UserLoginException, UserPasswordException, UserRegisterException
+from src.Exceptions import UserLoginException, UserPasswordException, UserRegisterException, UserFindException
 from src.endpoints.security_api import get_token_bearerAuth
 from ..models.allTracksResponse import AllTracksResponse
 from ..models.error import Error
@@ -106,6 +106,8 @@ async def register_post(
     status_code=status.HTTP_201_CREATED,
     responses={
         201: {"model": TrackResponse, "description": "Координаты добавлены"},
+        400: {"model": Error, "description": "Неверный запрос"},
+        404: {"model": Error, "description": "Пользователь не найден"},
     },
     tags=["default"],
     summary="Добавление GPS трека",
@@ -114,6 +116,21 @@ async def register_post(
 async def gps_post(
         track_request: TrackRequest = Body(None, description="")
 ) -> TrackResponse:
+    try:
+        lat_str, lon_str = track_request.latitude, track_request.longitude
+        lat = float(lat_str.strip())
+        lon = float(lon_str.strip())
+        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=Error(message=f"Координаты вне диапазона: {lat}, {lon}").model_dump()
+            )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=Error(
+                message=f"Некорректный формат координат: {track_request.latitude, track_request.longitude}. Причина: {e}").model_dump())
+
     try:
         gps_track = mainService.add_gps(
             track_request.user_id,
@@ -126,8 +143,11 @@ async def gps_post(
             latitude=gps_track.latitude,
             longitude=gps_track.longitude,
             timestamp=gps_track.timestamp)
-    except Exception as e:
-        print(e)
+    except UserFindException:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=Error(message=f"Пользователь с id: {track_request.user_id} не найден").model_dump()
+        )
 
 
 @router.get(
@@ -135,6 +155,7 @@ async def gps_post(
     responses={
         200: {"model": TrackFilteredResponse, "description": "Список GPS треков"},
         403: {"model": Error, "description": "Доступ запрещен"},
+        404: {"model": Error, "description": "Треки в этом диапазоне не найдены"},
     },
     tags=["default"],
     summary="Получение списка GPS треков по дате",
@@ -147,18 +168,26 @@ async def track_get(
 ) -> TrackFilteredResponse:
     try:
         tracks = mainService.get_tracks_by_date(start_date, end_date, token_bearerAuth)
-        filteredTracks = []
+        if not tracks:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=Error(message=f"Треки в этом диапазоне c {start_date} по {end_date} не найдены").model_dump()
+            )
+        filtered_tracks = []
         for track in tracks:
-            filteredTracks.append(TrackResponse(
+            filtered_tracks.append(TrackResponse(
                 id=track.id,
                 user_id=track.user_id,
                 latitude=track.latitude,
                 longitude=track.longitude,
                 timestamp=track.timestamp
             ))
-        return TrackFilteredResponse(tracks=filteredTracks)
+        return TrackFilteredResponse(tracks=filtered_tracks)
     except Exception as e:
-        print(e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=Error(message=f"{e}").model_dump()
+            )
 
 
 @router.post(
@@ -219,6 +248,11 @@ async def user_update(
         register_request: RegisterRequest = Body(None, description=""),
         token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
 ) -> UserResponse:
+    if token_bearerAuth.role != 'Administrator':
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=Error(message="Доступ запрещен").model_dump()
+        )
     if not user_id:
         user_id = token_bearerAuth.user_id
     try:
@@ -234,10 +268,9 @@ async def user_update(
             role=user.role,
             register_date=user.register_date)
     except Exception as e:
-        print("Ошибка: ", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Неверный запрос")
+            detail=Error(message=f"Неверный запрос. {e}").model_dump()
         )
 
 
@@ -267,14 +300,13 @@ async def user_change_role(
         role = Role(role)
         user = userService.user_change_role(user_id, role)
         return UserResponse(name=user.name,
-                                  email=user.email,
-                                  role=role,
-                                  register_date=user.register_date)
+                            email=user.email,
+                            role=role,
+                            register_date=user.register_date)
     except Exception as e:
-        print("Ошибка: ", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Неверный запрос")
+            detail=Error(message=f"Неверный запрос. {e}").model_dump()
         )
 
 
@@ -301,11 +333,10 @@ async def user_delete(
         )
     try:
         return await userService.delete_user(user_id)
-    except Exception as e:
-        print("Ошибка: ", e)
+    except UserFindException:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Неверный запрос")
+            detail=Error(message=f"Пользователя с таким id не существует").model_dump()
         )
 
 
@@ -331,9 +362,9 @@ async def user_get(
         )
     try:
         users = userService.get_users()
-        userResponse = []
+        user_response = []
         for user in users:
-            userResponse.append(
+            user_response.append(
                 UserResponse(
                     name=user.name,
                     email=user.email,
@@ -341,12 +372,11 @@ async def user_get(
                     register_date=user.register_date
                 )
             )
-        return UsersResponse(users=userResponse)
+        return UsersResponse(users=user_response)
     except Exception as e:
-        print("Ошибка: ", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Неверный запрос")
+            detail=Error(message=f"Неверный запрос. {e}").model_dump()
         )
 
 
@@ -356,7 +386,6 @@ async def user_get(
     responses={
         200: {"model": InfoResponse, "description": "Информация получена"},
         400: {"model": Error, "description": "Неверный запрос"},
-        403: {"model": Error, "description": "Доступ запрещен"},
     },
     tags=["default"],
     summary="Получение информации о профиле и треках пользователя",
@@ -382,16 +411,16 @@ async def info_get(
                     latitude=track.latitude,
                     longitude=track.longitude,
                     timestamp=track.timestamp))
-        filteredTrack = TrackFilteredResponse(tracks=tracks)
-        return InfoResponse(user=user, tracks=filteredTrack)
+        filtered_track = TrackFilteredResponse(tracks=tracks)
+        return InfoResponse(user=user, tracks=filtered_track)
     except Exception as e:
-        print("Ошибка: ", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Неверный запрос")
+            detail=Error(message=f"Неверный запрос. {e}").model_dump()
         )
 
 
+#TODO: ????добавить возможность просматривать ВСЕ треки с аккаунта администратора????
 @router.get(
     "/track",
     status_code=status.HTTP_200_OK,
@@ -421,8 +450,7 @@ async def track_get(
                     timestamp=track.timestamp))
         return AllTracksResponse(tracks=track_response)
     except Exception as e:
-        print("Ошибка: ", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Неверный запрос")
+            detail=Error(message=f"Неверный запрос. {e}").model_dump()
         )

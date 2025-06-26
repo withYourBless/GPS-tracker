@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List
 
-from src.Exceptions import UserLoginException, UserRegisterException
+from src.Exceptions import UserLoginException, UserRegisterException, UserFindException
 from src.endpoints.apis.main_api import UserPasswordException
 from src.endpoints.security_api import verify_password, create_access_token, get_password_hash
 from src.repository.repository import get_user_by_email, create_user, add_gps, get_all_tracks_by_date, \
@@ -16,6 +16,8 @@ from src.service.service_models import TokenModel
 
 class MainService:
     def add_gps(self, user_id: str, latitude: str, longitude: str, timestamp: datetime) -> TrackOut:
+        if get_user_by_id(user_id) is None:
+            raise UserFindException
         track = add_gps(user_id, latitude, longitude, timestamp)
         return TrackOut(
             id=track.id,
