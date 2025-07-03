@@ -4,15 +4,22 @@ from typing import Optional
 from fastapi import (
     APIRouter,
     Body,
+    Depends,
     HTTPException,
+    Path,
     Query,
     Security,
     status,
-    Path,
 )
 
-from src.Exceptions import UserLoginException, UserPasswordException, UserRegisterException, UserFindException
+from src.Exceptions import (
+    UserFindException,
+    UserLoginException,
+    UserPasswordException,
+    UserRegisterException,
+)
 from src.endpoints.security_api import get_token_bearerAuth
+
 from ..models.allTracksResponse import AllTracksResponse
 from ..models.error import Error
 from ..models.infoResponse import InfoResponse
@@ -25,16 +32,47 @@ from ..models.trackRequest import TrackRequest
 from ..models.trackResponse import TrackResponse
 from ..models.userResponse import UserResponse
 from ..models.usersResponse import UsersResponse
+
 from ...service.main_service import MainService
 from ...service.models.loginIn import LoginIn
 from ...service.models.registerIn import RegisterIn
+from ...service.models.role import Role
 from ...service.service_models import TokenModel
 from ...service.user_service import UserService
-from ...service.models.role import Role
 
 router = APIRouter()
 mainService = MainService()
 userService = UserService()
+
+
+def require_admin(token: TokenModel = Security(get_token_bearerAuth)) -> TokenModel:
+    if token.role != Role.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=Error(message="Доступ запрещен").model_dump()
+        )
+    return token
+
+
+def raise_bad_request(message: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_400_BAD_REQUEST,
+        detail=Error(message=message).model_dump()
+    )
+
+
+def raise_unauthorized(message: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail=Error(message=message).model_dump(),
+    )
+
+
+def raise_not_found(message: str) -> None:
+    raise HTTPException(
+        status_code=status.HTTP_404_NOT_FOUND,
+        detail=Error(message=message).model_dump(),
+    )
 
 
 @router.post(
@@ -48,7 +86,7 @@ userService = UserService()
     response_model_by_alias=True,
 )
 async def login_post(
-        login_request: LoginRequest = Body(None, description=""),
+        login_request: LoginRequest = Body(None, description="Данные для входа"),
 ) -> LoginResponse:
     try:
         token = mainService.login(
@@ -56,15 +94,9 @@ async def login_post(
                     password=login_request.password))
         return LoginResponse(token=token)
     except UserLoginException:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=Error(message="Неверные учетные данные").model_dump(),
-        )
+        raise_unauthorized("Неверный email")
     except UserPasswordException:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=Error(message="Неверный пароль").model_dump(),
-        )
+        raise_unauthorized("Неверный пароль")
 
 
 @router.post(
@@ -79,7 +111,7 @@ async def login_post(
     response_model_by_alias=True,
 )
 async def register_post(
-        register_request: RegisterRequest = Body(None, description=""),
+        register_request: RegisterRequest = Body(None, description="Форма регистрации"),
 ) -> RegisterResponse:
     try:
         register_response = mainService.register(
@@ -95,10 +127,7 @@ async def register_post(
             role=register_response.role,
             register_date=register_response.register_date)
     except UserRegisterException:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Пользователь с таким email уже существует").model_dump()
-        )
+        raise_bad_request("Пользователь с таким email уже существует")
 
 
 @router.post(
@@ -114,34 +143,23 @@ async def register_post(
     response_model_by_alias=True,
 )
 async def gps_post(
-        track_request: TrackRequest = Body(None, description="")
+        track_request: TrackRequest = Body(None, description="Данные трека")
 ) -> TrackResponse:
     if not mainService.user_exists(track_request.user_id):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=Error(message=f"Пользователь с id: {track_request.user_id} не найден").model_dump()
-        )
+        raise_not_found(f"Пользователь с id: {track_request.user_id} не найден")
     try:
-        lat_str, lon_str = track_request.latitude, track_request.longitude
-        lat = float(lat_str.strip())
-        lon = float(lon_str.strip())
-        if not (-90 <= lat <= 90 and -180 <= lon <= 180):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=Error(message=f"Координаты вне диапазона: {lat}, {lon}").model_dump()
-            )
-    except TypeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(
-                message=f"Некорректный формат координат: {track_request.latitude, track_request.longitude}").model_dump())
+        latitude_str, longitude_str = track_request.latitude, track_request.longitude
+        latitude = float(latitude_str.strip())
+        longitude = float(longitude_str.strip())
+        if not (-90.0 <= latitude <= 90.0) or not (-180.0 <= longitude <= 180.0):
+            raise_bad_request(f"Координаты вне диапазона: {latitude}, {longitude}")
+    except ValueError:
+        raise_bad_request(f"Некорректный формат координат: {track_request.latitude, track_request.longitude}")
     try:
         timestamp_datetime = datetime.strptime(track_request.timestamp, "%Y-%m-%d %H:%M:%S.%f")
-    except TypeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(
-                message=f"Некорректный формат времени: {track_request.timestamp}. Необходимо формат YYYY-MM-DD HH:MM:SS.ffff").model_dump())
+    except Exception:
+        raise_bad_request(
+            f"Некорректный формат времени: {track_request.timestamp}. Необходимо формат YYYY-MM-DD HH:MM:SS.ffff")
 
     try:
         gps_track = mainService.add_gps(
@@ -157,11 +175,7 @@ async def gps_post(
             longitude=gps_track.longitude,
             timestamp=gps_track.timestamp)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"{e}").model_dump()
-        )
-
+        raise_bad_request(f"Неверный запрос. {e}")
 
 
 @router.get(
@@ -175,33 +189,28 @@ async def gps_post(
     summary="Получение списка GPS треков по дате",
     response_model_by_alias=True,
 )
-async def track_get(
+async def get_filtered_tracks(
         start_date: Optional[datetime] = Query(None, alias="startDate", description="Начальная дата диапазона"),
         end_date: Optional[datetime] = Query(None, alias="endDate", description="Конечная дата диапазона"),
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        token: TokenModel = Security(get_token_bearerAuth),
 ) -> TrackFilteredResponse:
     try:
-        tracks = mainService.get_tracks_by_date(start_date, end_date, token_bearerAuth)
+        tracks = mainService.get_tracks_by_date(start_date, end_date, token)
         if not tracks:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=Error(message=f"Треки в этом диапазоне c {start_date} по {end_date} не найдены").model_dump()
-            )
-        filtered_tracks = []
-        for track in tracks:
-            filtered_tracks.append(TrackResponse(
+            raise_not_found(f"Треки в этом диапазоне c {start_date} по {end_date} не найдены")
+        filtered_tracks = [
+            TrackResponse(
                 id=track.id,
                 user_id=track.user_id,
                 latitude=track.latitude,
                 longitude=track.longitude,
                 timestamp=track.timestamp
-            ))
+            )
+            for track in tracks
+        ]
         return TrackFilteredResponse(tracks=filtered_tracks)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"{e}").model_dump()
-            )
+        raise_bad_request(f"Неверный запрос. {e}")
 
 
 @router.post(
@@ -217,14 +226,9 @@ async def track_get(
     response_model_by_alias=True,
 )
 async def user_post(
-        register_request: RegisterRequest = Body(None, description=""),
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        register_request: RegisterRequest = Body(None, description="Форма регистрации"),
+        token: TokenModel = Depends(require_admin),
 ) -> RegisterResponse:
-    if token_bearerAuth.role != 'Administrator':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Error(message="Доступ запрещен").model_dump()
-        )
     try:
         user = mainService.register(
             RegisterIn(
@@ -238,10 +242,7 @@ async def user_post(
             role=user.role,
             register_date=user.register_date)
     except UserRegisterException:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message="Пользователь с таким email уже существует").model_dump()
-        )
+        raise_bad_request("Пользователь с таким email уже существует")
 
 
 @router.put(
@@ -258,17 +259,15 @@ async def user_post(
     response_model_by_alias=True,
 )
 async def user_update(
-        user_id: str = Body(None, description=""),
-        register_request: RegisterRequest = Body(None, description=""),
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        user_id: str = Body(None, description="ID пользователя"),
+        register_request: RegisterRequest = Body(None, description="Форма регистрации"),
+        token: TokenModel = Security(get_token_bearerAuth),
 ) -> UserResponse:
-    if token_bearerAuth.role != 'Administrator':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Error(message="Доступ запрещен").model_dump()
-        )
     if not user_id:
-        user_id = token_bearerAuth.user_id
+        if token.role != Role.ADMIN.value:
+            user_id = token.user_id
+        else:
+            raise_bad_request("Неверный запрос. Введите user_id")
     try:
         user = userService.update_user_info(
             user_id,
@@ -282,10 +281,7 @@ async def user_update(
             role=user.role,
             register_date=user.register_date)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"Неверный запрос. {e}").model_dump()
-        )
+        raise_bad_request(f"Неверный запрос. {e}")
 
 
 @router.patch(
@@ -301,15 +297,10 @@ async def user_update(
     response_model_by_alias=True,
 )
 async def user_change_role(
-        user_id: str = Path(..., description=""),
-        role: str = Body(None, description=""),
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        user_id: str = Path(..., description="ID пользователя"),
+        role: str = Body(..., description="Новая роль пользователя"),
+        token: TokenModel = Depends(require_admin),
 ) -> UserResponse:
-    if token_bearerAuth.role != 'Administrator':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Error(message="Доступ запрещен").model_dump()
-        )
     try:
         role = Role(role)
         user = userService.user_change_role(user_id, role)
@@ -318,10 +309,7 @@ async def user_change_role(
                             role=role,
                             register_date=user.register_date)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"Неверный запрос. {e}").model_dump()
-        )
+        raise_bad_request(f"Неверный запрос. {e}")
 
 
 @router.delete(
@@ -337,21 +325,13 @@ async def user_change_role(
     response_model_by_alias=True,
 )
 async def user_delete(
-        user_id: str = Path(..., description=""),
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        user_id: str = Path(..., description="ID пользователя"),
+        token: TokenModel = Depends(require_admin),
 ) -> str:
-    if token_bearerAuth.role != 'Administrator':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Error(message="Доступ запрещен").model_dump()
-        )
     try:
         return await userService.delete_user(user_id)
     except UserFindException:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"Пользователя с таким id не существует").model_dump()
-        )
+        raise_bad_request(f"Пользователя с таким id не существует {user_id}")
 
 
 @router.get(
@@ -367,31 +347,24 @@ async def user_delete(
     response_model_by_alias=True,
 )
 async def user_get(
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        token: TokenModel = Depends(require_admin),
 ) -> UsersResponse:
-    if token_bearerAuth.role != 'Administrator':
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=Error(message="Доступ запрещен").model_dump()
-        )
     try:
         users = userService.get_users()
-        user_response = []
-        for user in users:
-            user_response.append(
-                UserResponse(
-                    name=user.name,
-                    email=user.email,
-                    role=user.role,
-                    register_date=user.register_date
-                )
+        if not users:
+            raise_not_found("Пользователи не найдены")
+        user_response = [
+            UserResponse(
+                name=u.name, email=u.email, role=u.role, register_date=u.register_date
             )
+            for u in users
+        ]
+
         return UsersResponse(users=user_response)
+    except HTTPException as e:
+        raise e
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"Неверный запрос. {e}").model_dump()
-        )
+        raise_bad_request(f"Неверный запрос. {e}")
 
 
 @router.get(
@@ -406,35 +379,33 @@ async def user_get(
     response_model_by_alias=True,
 )
 async def info_get(
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+        token: TokenModel = Security(get_token_bearerAuth),
 ) -> InfoResponse:
     try:
-        user_id = token_bearerAuth.user_id
+        user_id = token.user_id
         info = userService.get_my_info(user_id)
         user = UserResponse(
             name=info.user.name,
             email=info.user.email,
             role=info.user.role,
             register_date=info.user.register_date)
-        tracks = []
-        for track in info.tracks:
-            tracks.append(
-                TrackResponse(
-                    id=track.id,
-                    user_id=track.user_id,
-                    latitude=track.latitude,
-                    longitude=track.longitude,
-                    timestamp=track.timestamp))
+        tracks = [
+            TrackResponse(
+                id=track.id,
+                user_id=track.user_id,
+                latitude=track.latitude,
+                longitude=track.longitude,
+                timestamp=track.timestamp
+            )
+            for track in info.tracks
+        ]
+
         filtered_track = TrackFilteredResponse(tracks=tracks)
         return InfoResponse(user=user, tracks=filtered_track)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"Неверный запрос. {e}").model_dump()
-        )
+        raise_bad_request(f"Неверный запрос. {e}")
 
 
-#TODO: ????добавить возможность просматривать ВСЕ треки с аккаунта администратора????
 @router.get(
     "/track",
     status_code=status.HTTP_200_OK,
@@ -447,24 +418,25 @@ async def info_get(
     summary="Получение информации о треках пользователя",
     response_model_by_alias=True,
 )
-async def track_get(
-        token_bearerAuth: TokenModel = Security(get_token_bearerAuth),
+async def get_all_user_tracks(
+        token: TokenModel = Security(get_token_bearerAuth),
 ) -> AllTracksResponse:
     try:
-        user_id = token_bearerAuth.user_id
-        tracks = userService.get_my_tracks(user_id)
-        track_response = []
-        for track in tracks:
-            track_response.append(
-                TrackResponse(
-                    id=track.id,
-                    user_id=track.user_id,
-                    latitude=track.latitude,
-                    longitude=track.longitude,
-                    timestamp=track.timestamp))
+        if token.role == Role.ADMIN.value:
+            tracks = userService.get_all_tracks()
+        else:
+            user_id = token.user_id
+            tracks = userService.get_my_tracks(user_id)
+        track_response = [
+            TrackResponse(
+                id=track.id,
+                user_id=track.user_id,
+                latitude=track.latitude,
+                longitude=track.longitude,
+                timestamp=track.timestamp
+            )
+            for track in tracks
+        ]
         return AllTracksResponse(tracks=track_response)
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=Error(message=f"Неверный запрос. {e}").model_dump()
-        )
+        raise_bad_request(f"Неверный запрос. {e}")

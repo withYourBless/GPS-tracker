@@ -102,7 +102,7 @@ def get_tracks_by_date_userid(start_date: datetime, end_date: datetime, user_id:
     return tracks
 
 
-def update_user_info(user_id: str, name: str, email: str, hashed_password: str,) -> User:
+def update_user_info(user_id: str, name: str, email: str, hashed_password: str, ) -> User:
     query = """UPDATE "user" 
     SET name = %s, email = %s, password = %s
     WHERE id = %s;"""
@@ -142,7 +142,7 @@ def delete_user(user_id: str) -> str:
 
 
 def get_all_users() -> List[User]:
-    query = """ SELECT * FROM public.user"""
+    query = """ SELECT * FROM public.user WHERE role = 'User'"""
     with get_cursor() as cursor:
         cursor.execute(query)
         users_info = cursor.fetchall()
@@ -165,6 +165,20 @@ def get_tracks_by_id(user_id: str) -> List[GpsTrack | None]:
                 ORDER BY timestamp;"""
     with get_cursor() as cursor:
         cursor.execute(query, {"user_id": user_id})
+
+        rows = cursor.fetchall()
+
+    tracks = []
+    for row in rows:
+        tracks.append(GpsTrack(id=row[0], user_id=row[1], latitude=row[2], longitude=row[3], timestamp=row[4]))
+    return tracks
+
+
+def get_tracks() -> List[GpsTrack | None]:
+    query = """SELECT * FROM gps_track
+                ORDER BY timestamp;"""
+    with get_cursor() as cursor:
+        cursor.execute(query)
 
         rows = cursor.fetchall()
 

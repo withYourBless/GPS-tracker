@@ -17,11 +17,18 @@ WORKDIR /usr/src/app
 
 COPY --from=builder /gpstracker_env /gpstracker_env
 ENV PATH="/gpstracker_env/bin:$PATH"
+ENV PYTHONPATH=/usr/src/app
 
+COPY src src/
 COPY tests tests/
+
 RUN pip install pytest
+
 WORKDIR /usr/src/app/tests
-RUN pytest .
+RUN ls -l /usr/src/app/src
+COPY ../.env .env
+# RUN pytest .
+CMD ["pytest", "-v", "-s"]
 
 FROM python:3.11 AS service
 WORKDIR /usr/src/app

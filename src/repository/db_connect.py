@@ -1,10 +1,8 @@
 from contextlib import contextmanager
 import psycopg2
 from psycopg2 import Error, extensions
-from dotenv import load_dotenv
 import os
 
-load_dotenv()
 
 @contextmanager
 def get_cursor():
@@ -24,7 +22,6 @@ def get_cursor():
     except (Exception, Error) as error:
         print("Ошибка при работе с PostgreSQL:", error)
         print("DB_HOST =", os.getenv("DB_HOST"))
-        # Здесь можно сделать yield None, чтобы избежать ошибки "generator didn't yield"
         yield None
     finally:
         if cursor:

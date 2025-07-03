@@ -3,7 +3,7 @@ from typing import List
 from src.Exceptions import UserRegisterException, UserFindException
 from src.endpoints.security_api import get_password_hash
 from src.repository.repository import get_user_by_email, update_user_info, user_change_role, delete_user, get_all_users, \
-    get_user_by_id, get_tracks_by_id
+    get_user_by_id, get_tracks_by_id, get_tracks
 from src.service.models.infoOut import InfoOut
 from src.service.models.registerIn import RegisterIn
 from src.service.models.trackOut import TrackOut
@@ -38,7 +38,7 @@ class UserService:
                        register_date=user.register_date)
 
     async def delete_user(self, user_id: str) -> str:
-        if get_user_by_id(user_id):
+        if not get_user_by_id(user_id):
             raise UserFindException
         return delete_user(user_id)
 
@@ -53,6 +53,20 @@ class UserService:
 
     def get_my_tracks(self, user_id: str) -> List[TrackOut]:
         gps_tracks = get_tracks_by_id(user_id)
+        tracks_out = []
+        for track in gps_tracks:
+            tracks_out.append(
+                TrackOut(id=track.id,
+                         user_id=track.user_id,
+                         latitude=track.latitude,
+                         longitude=track.longitude,
+                         timestamp=track.timestamp, )
+            )
+
+        return tracks_out
+
+    def get_all_tracks(self) -> List[TrackOut]:
+        gps_tracks = get_tracks()
         tracks_out = []
         for track in gps_tracks:
             tracks_out.append(

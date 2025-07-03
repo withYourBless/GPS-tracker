@@ -1,3 +1,6 @@
+import logging
+import os
+
 from fastapi import FastAPI
 
 from src.endpoints.apis.main_api import router as DefaultApiRouter
@@ -10,12 +13,4 @@ app = FastAPI(
 
 app.include_router(DefaultApiRouter)
 
-import logging
-
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s [%(levelname)s] %(message)s"
-)
-
-logger = logging.getLogger(__name__)
 
