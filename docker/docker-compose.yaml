@@ -8,13 +8,13 @@ services:
       - ../.env
     ports:
       - "8080:4000"
-    environment:
-      - DB_URL=${DB_URL}
-      - DB_NAME=${DB_NAME}
-      - DB_USER=${DB_USER}
-      - DB_PASSWORD=${DB_PASSWORD}
-      - DB_HOST=${DB_HOST}
-      - DB_PORT=${DB_PORT}
+#    environment:
+#      - DB_URL=${DB_URL}
+#      - DB_NAME=${DB_NAME}
+#      - DB_USER=${DB_USER}
+#      - DB_PASSWORD=${DB_PASSWORD}
+#      - DB_HOST=${DB_HOST}
+#      - DB_PORT=${DB_PORT}
     depends_on:
       db:
         condition: service_healthy
@@ -25,14 +25,14 @@ services:
     container_name: gps-db
     build:
       dockerfile: Dockerfile.postgresql
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: password
-      POSTGRES_DB: gpstrack
+    env_file:
+      - ../.env
     command:
       - "postgres"
       - "-c"
       - "shared_preload_libraries=pg_cron"
+      - "-c"
+      - "cron.database_name=gpstrack"
     volumes:
       - ./migrations/init.sql:/docker-entrypoint-initdb.d/init.sql
     ports:

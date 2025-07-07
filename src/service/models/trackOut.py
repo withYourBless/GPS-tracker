@@ -9,3 +9,7 @@ class TrackOut(BaseModel):
     latitude: StrictStr
     longitude: StrictStr
     timestamp: datetime
+
+    model_config = {
+        "from_attributes": True
+    }

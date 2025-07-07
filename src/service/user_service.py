@@ -2,7 +2,7 @@ from typing import List
 
 from src.Exceptions import UserRegisterException, UserFindException
 from src.endpoints.security_api import get_password_hash
-from src.repository.repository import get_user_by_email, update_user_info, user_change_role, delete_user, get_all_users, \
+from src.repository.repository import update_user_info, user_change_role, delete_user, get_all_users, \
     get_user_by_id, get_tracks_by_id, get_tracks
 from src.service.models.infoOut import InfoOut
 from src.service.models.registerIn import RegisterIn
@@ -56,11 +56,7 @@ class UserService:
         tracks_out = []
         for track in gps_tracks:
             tracks_out.append(
-                TrackOut(id=track.id,
-                         user_id=track.user_id,
-                         latitude=track.latitude,
-                         longitude=track.longitude,
-                         timestamp=track.timestamp, )
+                TrackOut.model_validate(track)
             )
 
         return tracks_out
@@ -70,11 +66,7 @@ class UserService:
         tracks_out = []
         for track in gps_tracks:
             tracks_out.append(
-                TrackOut(id=track.id,
-                         user_id=track.user_id,
-                         latitude=track.latitude,
-                         longitude=track.longitude,
-                         timestamp=track.timestamp, )
+                TrackOut.model_validate(track)
             )
 
         return tracks_out

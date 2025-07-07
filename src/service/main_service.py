@@ -20,13 +20,7 @@ class MainService:
         if get_user_by_id(user_id) is None:
             raise UserFindException
         track = add_gps(user_id, latitude, longitude, timestamp)
-        return TrackOut(
-            id=track.id,
-            user_id=track.user_id,
-            latitude=track.latitude,
-            longitude=track.longitude,
-            timestamp=track.timestamp,
-        )
+        return TrackOut.model_validate(track)
 
     def get_tracks_by_date(self, start_date: datetime, end_date: datetime, token_bearerAuth: TokenModel) -> List[
         TrackOut]:
@@ -37,12 +31,7 @@ class MainService:
         filtered_tracks = []
         for track in tracks:
             filtered_tracks.append(
-                TrackOut(
-                    id=track.user_id,
-                    user_id=track.user_id,
-                    latitude=track.latitude,
-                    longitude=track.longitude,
-                    timestamp=track.timestamp))
+                TrackOut.model_validate(track))
         return filtered_tracks
 
     def login(self, login_in: LoginIn) -> str:
@@ -76,12 +65,7 @@ class MainService:
         user_id = create_user(name, email, hashed_password)
         user = get_user_by_id(user_id)
 
-        return RegisterOut(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            role=user.role,
-            register_date=datetime.now().strftime("%Y-%m-%d %H:%M:%S"), )
+        return RegisterOut.model_validate(user)
 
     def user_exists(self, user_id: str) -> bool:
         return get_user_by_id(user_id) is not None
