@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, StrictStr
 
 
@@ -6,4 +8,4 @@ class RegisterResponse(BaseModel):
     name: StrictStr
     email: StrictStr
     role: StrictStr
-    register_date: StrictStr
+    register_date: datetime

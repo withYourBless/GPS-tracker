@@ -90,8 +90,10 @@ async def login_post(
 ) -> LoginResponse:
     try:
         token = mainService.login(
-            LoginIn(email=login_request.email,
-                    password=login_request.password))
+            LoginIn(
+                **login_request.model_dump(),
+            )
+        )
         return LoginResponse(token=token)
     except UserLoginException:
         raise_unauthorized("Неверный email")
@@ -116,16 +118,12 @@ async def register_post(
     try:
         register_response = mainService.register(
             RegisterIn(
-                name=register_request.name,
-                email=register_request.email,
-                password=register_request.password,
-            ))
+                **register_request.model_dump()
+            )
+        )
         return RegisterResponse(
-            id=register_response.id,
-            name=register_response.name,
-            email=register_response.email,
-            role=register_response.role,
-            register_date=register_response.register_date)
+            **register_response.model_dump()
+        )
     except UserRegisterException:
         raise_bad_request("Пользователь с таким email уже существует")
 
@@ -155,25 +153,17 @@ async def gps_post(
             raise_bad_request(f"Координаты вне диапазона: {latitude}, {longitude}")
     except ValueError:
         raise_bad_request(f"Некорректный формат координат: {track_request.latitude, track_request.longitude}")
-    try:
-        timestamp_datetime = datetime.strptime(track_request.timestamp, "%Y-%m-%d %H:%M:%S.%f")
-    except Exception:
-        raise_bad_request(
-            f"Некорректный формат времени: {track_request.timestamp}. Необходимо формат YYYY-MM-DD HH:MM:SS.ffff")
 
     try:
         gps_track = mainService.add_gps(
             track_request.user_id,
             track_request.latitude,
             track_request.longitude,
-            timestamp_datetime)
+            track_request.timestamp)
 
         return TrackResponse(
-            id=gps_track.id,
-            user_id=gps_track.user_id,
-            latitude=gps_track.latitude,
-            longitude=gps_track.longitude,
-            timestamp=gps_track.timestamp)
+            **gps_track.model_dump()
+        )
     except Exception as e:
         raise_bad_request(f"Неверный запрос. {e}")
 
@@ -200,11 +190,7 @@ async def get_filtered_tracks(
             raise_not_found(f"Треки в этом диапазоне c {start_date} по {end_date} не найдены")
         filtered_tracks = [
             TrackResponse(
-                id=track.id,
-                user_id=track.user_id,
-                latitude=track.latitude,
-                longitude=track.longitude,
-                timestamp=track.timestamp
+                **track.model_dump()
             )
             for track in tracks
         ]
@@ -232,15 +218,12 @@ async def user_post(
     try:
         user = mainService.register(
             RegisterIn(
-                name=register_request.name,
-                email=register_request.email,
-                password=register_request.password))
+                **register_request.model_dump()
+            )
+        )
         return RegisterResponse(
-            id=user.id,
-            name=user.name,
-            email=user.email,
-            role=user.role,
-            register_date=user.register_date)
+            **user.model_dump()
+        )
     except UserRegisterException:
         raise_bad_request("Пользователь с таким email уже существует")
 
@@ -272,14 +255,12 @@ async def user_update(
         user = userService.update_user_info(
             user_id,
             RegisterIn(
-                name=register_request.name,
-                email=register_request.email,
-                password=register_request.password))
+                **register_request.model_dump()
+            )
+        )
         return UserResponse(
-            name=user.name,
-            email=user.email,
-            role=user.role,
-            register_date=user.register_date)
+            **user.model_dump()
+        )
     except Exception as e:
         raise_bad_request(f"Неверный запрос. {e}")
 
@@ -304,10 +285,9 @@ async def user_change_role(
     try:
         role = Role(role)
         user = userService.user_change_role(user_id, role)
-        return UserResponse(name=user.name,
-                            email=user.email,
-                            role=role,
-                            register_date=user.register_date)
+        return UserResponse(
+            **user.model_dump()
+        )
     except Exception as e:
         raise_bad_request(f"Неверный запрос. {e}")
 
@@ -355,7 +335,7 @@ async def user_get(
             raise_not_found("Пользователи не найдены")
         user_response = [
             UserResponse(
-                name=u.name, email=u.email, role=u.role, register_date=u.register_date
+                **u.model_dump()
             )
             for u in users
         ]
@@ -385,17 +365,11 @@ async def info_get(
         user_id = token.user_id
         info = userService.get_my_info(user_id)
         user = UserResponse(
-            name=info.user.name,
-            email=info.user.email,
-            role=info.user.role,
-            register_date=info.user.register_date)
+            **info.user.model_dump()
+        )
         tracks = [
             TrackResponse(
-                id=track.id,
-                user_id=track.user_id,
-                latitude=track.latitude,
-                longitude=track.longitude,
-                timestamp=track.timestamp
+                **track.model_dump()
             )
             for track in info.tracks
         ]
@@ -429,11 +403,7 @@ async def get_all_user_tracks(
             tracks = userService.get_my_tracks(user_id)
         track_response = [
             TrackResponse(
-                id=track.id,
-                user_id=track.user_id,
-                latitude=track.latitude,
-                longitude=track.longitude,
-                timestamp=track.timestamp
+                **track.model_dump()
             )
             for track in tracks
         ]

@@ -7,4 +7,4 @@ class TrackRequest(BaseModel):
     user_id: StrictStr
     latitude: StrictStr
     longitude: StrictStr
-    timestamp: StrictStr
+    timestamp: datetime
