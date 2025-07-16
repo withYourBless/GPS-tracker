@@ -4,7 +4,6 @@ from typing import List
 from src.Exceptions import UserLoginException, UserRegisterException, UserFindException
 from src.endpoints.apis.main_api import UserPasswordException
 from src.endpoints.security_api import verify_password, create_access_token, get_password_hash
-from src.repository.db_models import User
 from src.repository.repository import get_user_by_email, create_user, add_gps, get_all_tracks_by_date, \
     get_tracks_by_date_userid, get_user_by_id
 from src.service.models.loginIn import LoginIn
