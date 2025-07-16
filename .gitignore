@@ -1,2 +1,14 @@
- gpstracker_env/
- .idea/
+# Виртуальное окружение
+gpstracker_env/
+env/
+venv/
+
+# IDE
+.idea/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# macOS
+.DS_Store

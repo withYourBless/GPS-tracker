@@ -1,3 +1,6 @@
+import inspect
+import logging
+import os
 from datetime import datetime
 from typing import Optional
 
@@ -40,12 +43,20 @@ from ...service.models.role import Role
 from ...service.service_models import TokenModel
 from ...service.user_service import UserService
 
+log_dir = "/usr/src/app/logs/"
+os.makedirs(log_dir, exist_ok=True)
+logging.basicConfig(level=logging.INFO,
+                    filename="./logs/api.log",
+                    filemode="w",
+                    format="%(asctime)s %(levelname)s %(message)s")
+api_logger = logging.getLogger(__name__)
 router = APIRouter()
 mainService = MainService()
 userService = UserService()
 
 
 def require_admin(token: TokenModel = Security(get_token_bearerAuth)) -> TokenModel:
+    api_logger.error(f"HTTP_403_FORBIDDEN. {inspect.stack()[1][3]}: Доступ запрещен")
     if token.role != Role.ADMIN.value:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -55,6 +66,7 @@ def require_admin(token: TokenModel = Security(get_token_bearerAuth)) -> TokenMo
 
 
 def raise_bad_request(message: str) -> None:
+    api_logger.error(f"HTTP_400_BAD_REQUEST. {inspect.stack()[1][3]}: {message}")
     raise HTTPException(
         status_code=status.HTTP_400_BAD_REQUEST,
         detail=Error(message=message).model_dump()
@@ -62,6 +74,7 @@ def raise_bad_request(message: str) -> None:
 
 
 def raise_unauthorized(message: str) -> None:
+    api_logger.error(f"HTTP_401_UNAUTHORIZED. {inspect.stack()[1][3]}: {message}")
     raise HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail=Error(message=message).model_dump(),
@@ -69,6 +82,7 @@ def raise_unauthorized(message: str) -> None:
 
 
 def raise_not_found(message: str) -> None:
+    api_logger.error(f"HTTP_404_NOT_FOUND. {inspect.stack()[1][3]}: {message}")
     raise HTTPException(
         status_code=status.HTTP_404_NOT_FOUND,
         detail=Error(message=message).model_dump(),
@@ -88,6 +102,7 @@ def raise_not_found(message: str) -> None:
 async def login_post(
         login_request: LoginRequest = Body(None, description="Данные для входа"),
 ) -> LoginResponse:
+    api_logger.info(f"POST/login")
     try:
         token = mainService.login(
             LoginIn(
@@ -115,6 +130,7 @@ async def login_post(
 async def register_post(
         register_request: RegisterRequest = Body(None, description="Форма регистрации"),
 ) -> RegisterResponse:
+    api_logger.info(f"POST/register")
     try:
         register_response = mainService.register(
             RegisterIn(
@@ -143,6 +159,7 @@ async def register_post(
 async def gps_post(
         track_request: TrackRequest = Body(None, description="Данные трека")
 ) -> TrackResponse:
+    api_logger.info(f"POST/gps: track_request: {track_request}")
     if not mainService.user_exists(track_request.user_id):
         raise_not_found(f"Пользователь с id: {track_request.user_id} не найден")
     try:
@@ -184,6 +201,7 @@ async def get_filtered_tracks(
         end_date: Optional[datetime] = Query(None, alias="endDate", description="Конечная дата диапазона"),
         token: TokenModel = Security(get_token_bearerAuth),
 ) -> TrackFilteredResponse:
+    api_logger.info(f"GET/tracks: start_date: {start_date}, end_date: {end_date}")
     try:
         tracks = mainService.get_tracks_by_date(start_date, end_date, token)
         if not tracks:
@@ -215,6 +233,7 @@ async def user_post(
         register_request: RegisterRequest = Body(None, description="Форма регистрации"),
         token: TokenModel = Depends(require_admin),
 ) -> RegisterResponse:
+    api_logger.info(f"POST/user")
     try:
         user = mainService.register(
             RegisterIn(
@@ -246,6 +265,7 @@ async def user_update(
         register_request: RegisterRequest = Body(None, description="Форма регистрации"),
         token: TokenModel = Security(get_token_bearerAuth),
 ) -> UserResponse:
+    api_logger.info(f"PUT/user: user_id: {user_id}")
     if not user_id:
         if token.role != Role.ADMIN.value:
             user_id = token.user_id
@@ -282,6 +302,7 @@ async def user_change_role(
         role: str = Body(..., description="Новая роль пользователя"),
         token: TokenModel = Depends(require_admin),
 ) -> UserResponse:
+    api_logger.info(f"PUT/user/{user_id}: role: {role}")
     try:
         role = Role(role)
         user = userService.user_change_role(user_id, role)
@@ -308,6 +329,7 @@ async def user_delete(
         user_id: str = Path(..., description="ID пользователя"),
         token: TokenModel = Depends(require_admin),
 ) -> str:
+    api_logger.info(f"DELETE/user/{user_id}")
     try:
         return await userService.delete_user(user_id)
     except UserFindException:
@@ -342,6 +364,7 @@ async def user_get(
 
         return UsersResponse(users=user_response)
     except HTTPException as e:
+        api_logger.error(f"user_get: {e}")
         raise e
     except Exception as e:
         raise_bad_request(f"Неверный запрос. {e}")

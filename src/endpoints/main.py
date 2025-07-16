@@ -1,6 +1,3 @@
-import logging
-import os
-
 from fastapi import FastAPI
 
 from src.endpoints.apis.main_api import router as DefaultApiRouter
@@ -12,5 +9,4 @@ app = FastAPI(
 )
 
 app.include_router(DefaultApiRouter)
-
 
